@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   signUp,
   confirmSignUp,
   signIn,
   signOut,
   getCurrentUser,
+  fetchAuthSession,
 } from "aws-amplify/auth";
 
 function App() {
@@ -14,6 +15,21 @@ function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState("signIn"); // 'signIn' | 'signUp' | 'confirm' | 'home'
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        if (currentUser) {
+          setUser(currentUser);
+          setView("home");
+        }
+      } catch (err) {
+        // サインイン済みユーザーがいない場合は何もしない
+        console.log(err);
+      }
+    })();
+  }, []);
 
   // 1. サインアップ（新規登録）
   const handleSignUp = async (e) => {
@@ -71,6 +87,43 @@ function App() {
       setView("signIn");
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleRideRequest = async () => {
+    try {
+      // Cognitoから現在の認証セッション（JWTトークン）を取得
+      const session = await fetchAuthSession();
+      const token = session.tokens.idToken.toString();
+
+      // 先ほどメモしたAPI Gatewayの「呼び出しURL」に /ride を足したもの
+      const apiUrl =
+        "https://cutg0lmo7b.execute-api.ap-northeast-1.amazonaws.com/prod/ride";
+
+      // バックエンドへPOSTリクエストを送信
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: token, // ここでJWTトークンを提示（関所を通過）
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          PickupLocation: {
+            Latitude: 47.6174755835663,
+            Longitude: -122.28837066650185,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`APIリクエスト失敗: ${response.status}`);
+      }
+
+      const data = await response.json();
+      alert(`${data.UnicornName} (${data.Unicorn.Color}) が配車されました！`);
+    } catch (err) {
+      console.error(err);
+      alert("エラーが発生しました。コンソールを確認してください。");
     }
   };
 
@@ -242,6 +295,25 @@ function App() {
             ようこそ、あなたのユーザーIDは: <br />
             <strong>{user?.userId}</strong> です。
           </p>
+
+          {/* 【追加】配車ボタン */}
+          <button
+            onClick={handleRideRequest}
+            style={{
+              width: "100%",
+              padding: "15px",
+              backgroundColor: "#8b5cf6",
+              color: "white",
+              border: "none",
+              cursor: "pointer",
+              marginTop: "20px",
+              fontSize: "16px",
+              fontWeight: "bold",
+            }}
+          >
+            ユニコーンを呼ぶ！
+          </button>
+
           <button
             onClick={handleSignOut}
             style={{
